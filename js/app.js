@@ -2,6 +2,19 @@ const AUTH_STYLE = document.createElement('style');
 AUTH_STYLE.textContent = `.auth-page{min-height:70vh;display:flex;justify-content:center;align-items:center;padding:40px 20px}.auth-card{width:100%;max-width:480px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(0,0,0,.06)}.auth-card h1{margin-top:0}.auth-card .btn{width:100%;margin-top:6px}`;
 document.head.appendChild(AUTH_STYLE);
 
+const LS = (() => {
+  let ok = false;
+  try { localStorage.setItem('lf-t','1'); localStorage.removeItem('lf-t'); ok = true; } catch (e) {}
+  let mem = {};
+  try { mem = JSON.parse(window.name || '{}') || {}; if (typeof mem !== 'object') mem = {}; } catch (e) { mem = {}; }
+  const flush = () => { try { window.name = JSON.stringify(mem); } catch (e) {} };
+  return {
+    ok,
+    getItem: k => ok ? localStorage.getItem(k) : (k in mem ? mem[k] : null),
+    setItem: (k,v) => { if (ok) localStorage.setItem(k,v); else { mem[k] = String(v); flush(); } },
+    removeItem: k => { if (ok) localStorage.removeItem(k); else { delete mem[k]; flush(); } }
+  };
+})();
 const $ = s => document.querySelector(s);
 const STEPS = ['Reported','Received at office','Matched','Verified','Returned'];
 const COLORS = ['#0e7c7b','#e9a23b','#5b6fb0','#b3372f','#3f8f5a'];
@@ -52,7 +65,32 @@ const AUTH = {
   ],
   requests: []
 };
+try {
+  const savedUsers = JSON.parse(LS.getItem('lf-users') || 'null');
+  if (Array.isArray(savedUsers)) AUTH.users = savedUsers;
+} catch (e) {}
+try {
+  const savedReqs = JSON.parse(LS.getItem('lf-requests') || 'null');
+  if (Array.isArray(savedReqs)) AUTH.requests = savedReqs;
+} catch (e) {}
+function saveAuth(){
+  try {
+    LS.setItem('lf-users', JSON.stringify(AUTH.users));
+    LS.setItem('lf-requests', JSON.stringify(AUTH.requests));
+  } catch (e) {}
+}
+function startView(u){
+  if (u.role === 'admin') return 'dash';
+  if (u.role === 'super') return 'orgs';
+  if (u.role === 'staff') return 'queue';
+  return u.membershipStatus === 'approved' ? 'home' : 'community';
+}
 let S = {role:null,view:'login',kind:'lost',cat:'All',currentUser:null};
+try {
+  const savedId = Number(LS.getItem('lf-current-user-id'));
+  if (savedId) S.currentUser = AUTH.users.find(u => Number(u.id) === savedId) || null;
+  if (S.currentUser) { S.role = S.currentUser.role; S.view = startView(S.currentUser); }
+} catch (e) {}
 
 const stepper = n => '<div class="steps">' + STEPS.map((s,i) => '<span class="' + (i<n?'on':'') + '">' + s + '</span>').join('') + '</div>';
 const head = (t,s) => '<h1>' + t + '</h1><p class="sub">' + s + '</p>';
@@ -61,7 +99,7 @@ const field = (l,i) => '<div class="field"><label>' + l + '</label>' + i + '</di
 const opts = a => a.map(x => '<option>' + x + '</option>').join('');
 
 let LANG = 'en';
-try { LANG = localStorage.getItem('lf-lang') || 'en'; } catch (e) {}
+try { LANG = LS.getItem('lf-lang') || 'en'; } catch (e) {}
 const J = {
 'Lost & Found':'落とし物管理','Yokohama Demo School':'横浜デモ学園','Harbor Mart':'ハーバーマート','Nexa Systems':'ネクサシステムズ',
 'Member':'会員','Staff':'スタッフ','Org admin':'組織管理者','Super admin':'システム管理者',
@@ -106,8 +144,16 @@ const J = {
 'Name on ID matches the claimant':'身分証の氏名が申請者と一致','Face matches the ID photo':'顔が身分証の写真と一致','Check both boxes after verifying the ID.':'身分証を確認したら両方にチェックしてください。','Confirm handover':'返却を確定',
 'Thank the finder':'拾ってくれた方にお礼','Optional. Send whatever feels right.':'任意です。気持ちに合った形で送れます。','Message':'メッセージ','Thank you so much for returning my backpack!':'リュックを届けてくださり、本当にありがとうございました！',
 'Add a gift (optional)':'ギフトを追加（任意）','No gift, message only':'ギフトなし、メッセージのみ','Gift card code':'ギフトカードコード','Not now':'今はしない'
+,
+'Welcome to Lost & Found':'落とし物管理へようこそ','Login to manage your lost and found items.':'ログインして落とし物を管理しましょう。','Email':'メールアドレス','Password':'パスワード','Enter your email':'メールアドレスを入力','Enter your password':'パスワードを入力','Login':'ログイン','Log out':'ログアウト',
+'Don\'t have an account?':'アカウントをお持ちでないですか？','Create Account':'アカウント作成','Create your Lost & Found account.':'落とし物管理のアカウントを作成します。','Your name':'お名前','At least 6 characters':'6文字以上','Confirm Password':'パスワード（確認）','Enter password again':'もう一度入力','Already have an account?':'すでにアカウントをお持ちですか？',
+'No account found for this email in this browser. Please create an account first.':'このブラウザにこのメールのアカウントがありません。先にアカウントを作成してください。','Account created':'アカウントを作成しました','Invalid email or password.':'メールアドレスまたはパスワードが正しくありません。','Please fill in all fields.':'すべての項目を入力してください。','Please enter a valid email address.':'有効なメールアドレスを入力してください。','Password must be at least 6 characters.':'パスワードは6文字以上にしてください。','Passwords do not match.':'パスワードが一致しません。','This email is already registered.':'このメールアドレスは既に登録されています。',
+'Find Your Community':'所属先を探す','Choose the school or organization you belong to.':'所属する学校・組織を選んでください。','Request Membership':'参加を申請','Membership Request':'参加申請','Membership Approved!':'参加が承認されました！','You are now a member of:':'次の組織のメンバーになりました：','Go to Dashboard':'ダッシュボードへ','Refresh Status':'状態を更新','Your request has been sent to the organization administrator.':'申請は組織の管理者に送信されました。',
+'Membership request sent':'参加申請を送信しました','Request already sent':'申請は送信済みです','Membership approved':'参加を承認しました','Membership request rejected':'参加申請を却下しました',
+'Users & Membership Requests':'ユーザーと参加申請','Manage people who want to join your organization.':'組織への参加を希望する人を管理します。','Membership Requests':'参加申請','No pending requests.':'承認待ちの申請はありません。','Members':'メンバー','Accept':'承認する','Requesting:':'申請先：'
 };
 const P = [
+[/^Requesting: (.+)$/, m => '申請先：' + tr1(m[1])],
 [/^Hello, (.+)$/, m => 'こんにちは、' + m[1] + 'さん'],
 [/^([A-Z][a-z]{2}) (\d+)$/, m => (J[m[1]] || m[1]) + m[2] + '日'],
 [/^Claim: (.+)$/, m => '請求：' + tr1(m[1])],
@@ -155,7 +201,7 @@ function applyLang(root){
 }
 function setLang(l){
   LANG = l;
-  try { localStorage.setItem('lf-lang', l); } catch (e) {}
+  try { LS.setItem('lf-lang', l); } catch (e) {}
   closeModal();
   render();
 }
@@ -171,17 +217,17 @@ const V = {
       field('Email','<input id="loginEmail" type="email" placeholder="Enter your email">') +
       field('Password','<input id="loginPassword" type="password" placeholder="Enter your password">') +
       '<div id="loginError" style="color:var(--red);margin-bottom:12px"></div>' +
-      '<button class="btn" onclick="loginUser()">Login</button>' +
-      '<p style="text-align:center;margin-top:20px">Don\'t have an account? <button class="btn sec" onclick="go(\'register\')">Create Account</button></p></div></div>';
+      '<button type="button" class="btn" onclick="window.loginUser()">Login</button>' +
+      '<p style="text-align:center;margin-top:20px">Don\'t have an account? <button class="btn sec" onclick="go(\'signup\')">Create Account</button></p></div></div>';
   },
-  register(){
+  signup(){
     return '<div class="auth-page"><div class="auth-card"><h1>Create Account</h1><p class="sub">Create your Lost & Found account.</p>' +
       field('Name','<input id="registerName" type="text" placeholder="Your name">') +
       field('Email','<input id="registerEmail" type="email" placeholder="you@example.com">') +
       field('Password','<input id="registerPassword" type="password" placeholder="At least 6 characters">') +
       field('Confirm Password','<input id="registerPasswordConfirm" type="password" placeholder="Enter password again">') +
       '<div id="registerError" style="color:var(--red);margin-bottom:12px"></div>' +
-      '<button class="btn" onclick="registerUser()">Create Account</button>' +
+      '<button type="button" class="btn" onclick="window.registerUser()">Create Account</button>' +
       '<p style="text-align:center;margin-top:20px">Already have an account? <button class="btn sec" onclick="go(\'login\')">Login</button></p></div></div>';
   },
   community(){
@@ -201,7 +247,7 @@ const V = {
 
   home(){
     const mine = D.items.filter(i=>i.mine);
-    return '<div class="hero"><h1>Hello, Aiko</h1><p>2 items in progress. 1 is ready for a thank-you.</p><button class="btn" onclick="go(\'report\')">Report an item</button> <button class="btn sec" onclick="go(\'browse\')">Browse found items</button></div>' +
+    return '<div class="hero"><h1>Hello, '+esc(S.currentUser?S.currentUser.name.split(' ')[0]:'')+'</h1><p>2 items in progress. 1 is ready for a thank-you.</p><button class="btn" onclick="go(\'report\')">Report an item</button> <button class="btn sec" onclick="go(\'browse\')">Browse found items</button></div>' +
       '<div class="box" style="background:var(--amberbg);border-color:var(--amber);margin-bottom:16px">Items are always returned at the office. Bring a photo ID to collect yours.</div>' +
       '<div class="grid">' + stat(2,'Items you reported') + stat(1,'Possible match') + stat(1,'Ready to thank') + '</div>' +
       '<h2>Your items</h2>' + mine.map(i =>
@@ -278,12 +324,22 @@ const V = {
       '<h2>Returns per month</h2><div class="box" style="padding-bottom:36px"><div class="bars">' + m.map(x => '<div style="height:' + x[1]*6 + 'px"><span>' + x[0] + ' · ' + x[1] + '</span></div>').join('') + '</div></div>';
   },
   users(){
-    const pending=AUTH.requests.filter(r=>r.status==='pending');
+    const orgId=S.currentUser&&S.currentUser.organizationId;
+    const pending=AUTH.requests.filter(r=>r.status==='pending'&&r.organizationId===orgId);
+    const members=AUTH.users.filter(u=>u.organizationId===orgId&&u.membershipStatus==='approved');
     return head('Users & Membership Requests','Manage people who want to join your organization.')+
-      '<div class="box" style="margin-bottom:20px"><h2>Membership Requests</h2>'+(
+      '<div class="box" style="margin-bottom:20px"><h2 style="margin-top:0">Membership Requests</h2>'+(
         pending.length===0 ? '<p class="meta">No pending requests.</p>' :
-        pending.map(request=>{const user=AUTH.users.find(u=>u.id===request.userId);const org=AUTH.organizations.find(o=>o.id===request.organizationId);return '<div class="tag"><div class="row"><div><b>'+esc(user.name)+'</b><div class="meta">'+esc(user.email)+'</div><div class="meta">Requesting: '+esc(org.name)+'</div></div><span class="badge">Pending</span></div><div style="margin-top:12px"><button class="btn" onclick="approveMembership('+request.id+')">Accept</button> <button class="btn bad" onclick="rejectMembership('+request.id+')">Reject</button></div></div>';}).join('')
-      )+'</div>';
+        pending.map(r=>{
+          const u=AUTH.users.find(x=>x.id===r.userId);
+          const org=AUTH.organizations.find(o=>o.id===r.organizationId);
+          if(!u||!org) return '';
+          return '<div class="tag"><div class="row"><div><b>'+esc(u.name)+'</b><div class="meta">'+esc(u.email)+'</div><div class="meta">Requesting: '+esc(org.name)+'</div></div><span class="badge">Pending</span></div>'+
+            '<div style="margin-top:12px"><button class="btn" onclick="approveMembership('+r.id+')">Accept</button> <button class="btn bad" onclick="rejectMembership('+r.id+')">Reject</button></div></div>';
+        }).join('')
+      )+'</div>'+
+      '<h2>Members</h2><table><tr><th>Name</th><th>Email</th><th>Role</th></tr>'+
+      members.map(u=>'<tr><td>'+esc(u.name)+'</td><td>'+esc(u.email)+'</td><td>'+ROLE_NAMES[u.role]+'</td></tr>').join('')+'</table>';
   },
   settings(){
     return head('Settings','Rules for your organization.') +
@@ -304,7 +360,7 @@ const V = {
 
 function render(){
   const loggedIn=!!S.currentUser;
-  $('#roles').innerHTML=loggedIn ? Object.keys(ROLE_NAMES).map(r=>'<button class="'+(S.role===r?'on':'')+'" onclick="setRole(\''+r+'\')">'+ROLE_NAMES[r]+'</button>').join('') : '';
+  $('#roles').innerHTML=loggedIn ? '<button class="on" style="cursor:default">'+esc(S.currentUser.name)+' · '+ROLE_NAMES[S.role]+'</button><button onclick="logout()">Log out</button>' : '';
   const nav=loggedIn && NAV[S.role] ? NAV[S.role] : [];
   $('#nav').innerHTML=nav.map(n=>'<button class="'+(S.view===n[0]?'on':'')+'" onclick="go(\''+n[0]+'\')">'+n[1]+'</button>').join('');
   $('#main').innerHTML=V[S.view] ? V[S.view]() : V.login();
@@ -312,13 +368,13 @@ function render(){
   applyLang(document.querySelector('header')); applyLang($('#nav')); applyLang($('#main'));
   document.querySelectorAll('.lang span').forEach(s=>s.classList.toggle('on',s.dataset.l===LANG));
 }
-function setRole(r){
-  if(!S.currentUser) return;
-  if(r==='member' && S.currentUser.membershipStatus!=='approved'){go('community');return;}
-  S.role=r; S.view=FIRST[r]; render();
+function logout(){
+  S.currentUser=null; S.role=null; S.view='login';
+  try { LS.removeItem('lf-current-user-id'); } catch (e) {}
+  render();
 }
 function go(v){
-  const publicPages=['login','register'];
+  const publicPages=['login','signup'];
   if(!publicPages.includes(v) && !S.currentUser){S.view='login';render();return;}
   const memberPages=['home','report','browse'];
   if(memberPages.includes(v) && S.currentUser.membershipStatus!=='approved'){S.view='community';render();return;}
@@ -328,32 +384,106 @@ function go(v){
   S.view=v; render();
 }
 function loginUser(){
-  const email=($('#loginEmail')?.value||'').trim().toLowerCase();
-  const password=($('#loginPassword')?.value||'').trim();
-  const user=AUTH.users.find(u=>u.email.toLowerCase()===email&&u.password===password);
-  if(!user){$('#loginError').textContent='Invalid email or password.';return;}
-  S.currentUser=user; S.role=user.role;
-  S.view=user.role==='admin'?'dash':(user.membershipStatus==='approved'?'home':'community'); render();
+  try {
+    const email = (document.getElementById('loginEmail')?.value || '').trim().toLowerCase();
+    const password = document.getElementById('loginPassword')?.value || '';
+    const error = document.getElementById('loginError');
+    const user = AUTH.users.find(u => String(u.email).toLowerCase() === email && u.password === password);
+    if (!user) {
+      const known = AUTH.users.some(u => String(u.email).toLowerCase() === email);
+      if (error) error.textContent = known ? 'Invalid email or password.' : 'No account found for this email in this browser. Please create an account first.';
+      return;
+    }
+    if (error) error.textContent = '';
+    S.currentUser = user;
+    S.role = user.role;
+    S.view = startView(user);
+    try { LS.setItem('lf-current-user-id', String(user.id)); } catch (e) {}
+    render();
+  } catch (e) {
+    console.error('Login error:', e);
+    const error = document.getElementById('loginError');
+    if (error) error.textContent = 'Could not log in. Please try again.';
+  }
 }
 function registerUser(){
-  const name=($('#registerName')?.value||'').trim();
-  const email=($('#registerEmail')?.value||'').trim().toLowerCase();
-  const password=($('#registerPassword')?.value||'').trim();
-  const confirmPassword=($('#registerPasswordConfirm')?.value||'').trim();
-  const error=$('#registerError');
-  if(!name||!email||!password){error.textContent='Please fill in all fields.';return;}
-  if(password.length<6){error.textContent='Password must be at least 6 characters.';return;}
-  if(password!==confirmPassword){error.textContent='Passwords do not match.';return;}
-  if(AUTH.users.some(u=>u.email.toLowerCase()===email)){error.textContent='This email is already registered.';return;}
-  const newUser={id:AUTH.users.length+1,name,email,password,role:'member',organizationId:null,membershipStatus:null};
-  AUTH.users.push(newUser); S.currentUser=newUser; S.role='member'; S.view='community'; toast('Account created successfully'); render();
+  try {
+    const nameEl = document.getElementById('registerName');
+    const emailEl = document.getElementById('registerEmail');
+    const passwordEl = document.getElementById('registerPassword');
+    const confirmEl = document.getElementById('registerPasswordConfirm');
+    const error = document.getElementById('registerError');
+
+    if (!nameEl || !emailEl || !passwordEl || !confirmEl || !error) {
+      console.error('Registration form elements were not found.');
+      return;
+    }
+
+    const name = nameEl.value.trim();
+    const email = emailEl.value.trim().toLowerCase();
+    const password = passwordEl.value;
+    const confirmPassword = confirmEl.value;
+
+    error.textContent = '';
+
+    if (!name || !email || !password || !confirmPassword) {
+      error.textContent = 'Please fill in all fields.';
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      error.textContent = 'Please enter a valid email address.';
+      return;
+    }
+    if (password.length < 6) {
+      error.textContent = 'Password must be at least 6 characters.';
+      return;
+    }
+    if (password !== confirmPassword) {
+      error.textContent = 'Passwords do not match.';
+      return;
+    }
+    if (AUTH.users.some(u => String(u.email).toLowerCase() === email)) {
+      error.textContent = 'This email is already registered.';
+      return;
+    }
+
+    const newUser = {
+      id: AUTH.users.length ? Math.max(...AUTH.users.map(u => Number(u.id) || 0)) + 1 : 1,
+      name,
+      email,
+      password,
+      role: 'member',
+      organizationId: null,
+      membershipStatus: null
+    };
+
+    AUTH.users.push(newUser);
+    S.currentUser = newUser;
+    S.role = 'member';
+    S.view = 'community';
+
+    // Keep the prototype account available after a page refresh.
+    try {
+      LS.setItem('lf-users', JSON.stringify(AUTH.users));
+      LS.setItem('lf-current-user-id', String(newUser.id));
+    } catch (storageError) {
+      console.warn('Local storage is unavailable; account will last until refresh.', storageError);
+    }
+
+    toast('Account created');
+    render();
+  } catch (e) {
+    console.error('Registration error:', e);
+    const error = document.getElementById('registerError');
+    if (error) error.textContent = 'Could not create the account. Please try again.';
+  }
 }
 function requestMembership(organizationId){
   const user=S.currentUser; if(!user){go('login');return;}
   const existing=AUTH.requests.find(r=>r.userId===user.id&&r.organizationId===organizationId&&r.status==='pending');
   if(existing){toast('Request already sent');return;}
   AUTH.requests.push({id:AUTH.requests.length+1,userId:user.id,organizationId,status:'pending',requestedAt:new Date().toISOString(),approvedAt:null,approvedBy:null});
-  user.membershipStatus='pending'; toast('Membership request sent'); S.view='community'; render();
+  user.membershipStatus='pending'; saveAuth(); toast('Membership request sent'); S.view='community'; render();
 }
 function approveMembership(requestId){
   if(!S.currentUser||S.currentUser.role!=='admin') return;
@@ -361,14 +491,14 @@ function approveMembership(requestId){
   request.status='approved'; request.approvedAt=new Date().toISOString(); request.approvedBy=S.currentUser.id;
   const user=AUTH.users.find(u=>u.id===request.userId);
   if(user){user.membershipStatus='approved';user.organizationId=request.organizationId;}
-  toast('Membership approved'); render();
+  saveAuth(); toast('Membership approved'); render();
 }
 function rejectMembership(requestId){
   if(!S.currentUser||S.currentUser.role!=='admin') return;
   const request=AUTH.requests.find(r=>r.id===requestId); if(!request)return;
   request.status='rejected'; const user=AUTH.users.find(u=>u.id===request.userId);
   if(user){user.membershipStatus='rejected';user.organizationId=null;}
-  toast('Membership request rejected'); render();
+  saveAuth(); toast('Membership request rejected'); render();
 }
 function enterMemberArea(){
   if(!S.currentUser||S.currentUser.membershipStatus!=='approved'){go('community');return;}
