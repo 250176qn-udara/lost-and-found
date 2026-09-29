@@ -1,5 +1,5 @@
 -- Lost & Found — Step 2 database
--- Import once: phpMyAdmin > Import, or:  mysql -u root < database/schema.sql
+-- Import once: phpMyAdmin > Import, or:  mysql -u root < schema.sql
 
 CREATE DATABASE IF NOT EXISTS lost_and_found CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE lost_and_found;
@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS items (
   finder_name     VARCHAR(100) NULL,          -- optional, for found items a staff member logs on someone else's behalf
   received_by     INT UNSIGNED NULL,
   received_at     TIMESTAMP NULL DEFAULT NULL,
+  matched_item_id INT UNSIGNED NULL,          -- Step 3C: the item the system suggested as a match
+  matched_at      TIMESTAMP NULL DEFAULT NULL,
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_org_kind_status (organization_id, kind, status),
@@ -89,13 +91,6 @@ CREATE TABLE IF NOT EXISTS items (
   CONSTRAINT fk_item_received FOREIGN KEY (received_by)     REFERENCES users(id)         ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- Safe to re-run: adds the Step 3B columns if you already created this table before.
-ALTER TABLE items ADD COLUMN IF NOT EXISTS item_code   VARCHAR(20)  NULL UNIQUE;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS shelf       VARCHAR(10)  NULL;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS finder_name VARCHAR(100) NULL;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS received_by INT UNSIGNED NULL;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS received_at TIMESTAMP NULL DEFAULT NULL;
-
 -- A couple of demo items for Yokohama Demo School (org 1), reported by Aiko (user 1).
 INSERT IGNORE INTO items (id, organization_id, reporter_id, kind, title, category, place, item_date, description, status) VALUES
   (1, 1, 1, 'lost',  'Black wallet',     'Wallet', 'Library', '2026-09-24', 'Black leather wallet, small scratch', 1),
@@ -103,8 +98,6 @@ INSERT IGNORE INTO items (id, organization_id, reporter_id, kind, title, categor
 
 -- Step 3C: basic (non-AI) matching + claim requests.
 -- matched_item_id links a lost item to the found item the system suggested, or vice versa.
-ALTER TABLE items ADD COLUMN IF NOT EXISTS matched_item_id INT UNSIGNED NULL;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS matched_at       TIMESTAMP NULL DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS claims (
   id              INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

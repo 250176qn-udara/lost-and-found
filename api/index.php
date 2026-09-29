@@ -60,7 +60,7 @@ function db(): PDO {
                  PDO::ATTR_EMULATE_PREPARES => false]
             );
         } catch (PDOException $e) {
-            fail('Cannot connect to the database. Check api/config.php and import database/schema.sql.', 500);
+            fail('Cannot connect to the database. Check config.php and import schema.sql.', 500);
         }
     }
     return $pdo;
@@ -81,9 +81,6 @@ if ($isPost && ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'lf') {
     fail('Bad request.', 400);   // blocks cross-site form posts
 }
 $in = [];
-if ($isPost && !in_array($action, ['login', 'register'], true)) {
-    requireCsrf();
-}
 if ($isPost) {
     $in = json_decode((string)file_get_contents('php://input'), true);
     if (!is_array($in)) $in = [];
@@ -353,7 +350,10 @@ case 'report_item':
     $st->execute([$s['organizationId'], $uid, $kind, $title, $category, $place, $itemDate, $desc ?: null, $photo]);
     $id = (int)db()->lastInsertId();
     $matchId = findMatchFor($s['organizationId'], $kind, $category, $place, $itemDate, $id);
-    if ($matchId !== null) applyMatch($id, $matchId);
+    // Only lost reports are matched right away. A found item is matched after staff receive it at the office,
+    // otherwise it would jump to "Matched" and never appear in the staff queue.
+    if ($kind === 'lost' && $matchId !== null) { applyMatch($id, $matchId); applyMatch($matchId, $id); }
+    else $matchId = null;
     out(['ok' => true, 'id' => $id, 'matched' => $matchId !== null]);
 
 case 'my_items':

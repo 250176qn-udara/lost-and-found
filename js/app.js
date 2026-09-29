@@ -57,6 +57,7 @@ const FIRST = {member:'home',staff:'queue',admin:'dash',super:'orgs'};
 const AUTH = {organizations:[], myPending:null, pendingRequests:[], members:[], myItems:[], foundItems:[], queue:[], myClaims:[], claimsQueue:[]};
 let S = {role:null,view:'login',kind:'lost',cat:'All',currentUser:null,serverError:'',registerItemId:null,scanResult:null,scanError:''};
 const API = 'api/index.php';
+let CSRF = '';   // security token from the server, sent with every POST
 
 async function api(action, data, query){
   let res;
@@ -64,7 +65,7 @@ async function api(action, data, query){
     const qs = query ? '&' + new URLSearchParams(query).toString() : '';
     res = await fetch(API + '?action=' + encodeURIComponent(action) + qs, {
       method: data ? 'POST' : 'GET',
-      headers: {'Content-Type':'application/json','X-Requested-With':'lf'},
+      headers: {'Content-Type':'application/json','X-Requested-With':'lf','X-CSRF-Token':CSRF},
       credentials: 'same-origin',
       body: data ? JSON.stringify(data) : undefined
     });
@@ -74,6 +75,7 @@ async function api(action, data, query){
   let json = null;
   try { json = await res.json(); } catch (e) {}
   if (!json) throw new Error('The server did not return JSON. Is PHP running? Open api/index.php?action=organizations in the browser to check.');
+  if (json.csrfToken) CSRF = json.csrfToken;
   if (!res.ok || json.ok === false) throw new Error(json.error || 'Server error (' + res.status + ')');
   return json;
 }
