@@ -7,8 +7,34 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 
 session_name('lfsid');
-session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
+
+// Security: expire inactive sessions after 30 minutes.
+const SESSION_TIMEOUT = 1800;
+if (isset($_SESSION['last_activity']) && (time() - (int)$_SESSION['last_activity']) > SESSION_TIMEOUT) {
+    $_SESSION = [];
+    session_destroy();
+    fail('Your session expired. Please log in again.', 401);
+}
+if (isset($_SESSION['uid'])) $_SESSION['last_activity'] = time();
+
+function csrfToken(): string {
+    if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    return $_SESSION['csrf_token'];
+}
+function requireCsrf(array $in): void {
+    $token = (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($in['_csrf'] ?? ''));
+    if (!isset($_SESSION['csrf_token']) || $token === '' || !hash_equals($_SESSION['csrf_token'], $token)) {
+        fail('Security token expired. Please refresh the page and try again.', 419);
+    }
+}
 
 function out(array $d, int $code = 200): never {
     http_response_code($code);
@@ -55,10 +81,14 @@ if ($isPost && ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'lf') {
     fail('Bad request.', 400);   // blocks cross-site form posts
 }
 $in = [];
+if ($isPost && !in_array($action, ['login', 'register'], true)) {
+    requireCsrf();
+}
 if ($isPost) {
     $in = json_decode((string)file_get_contents('php://input'), true);
     if (!is_array($in)) $in = [];
 }
+if ($isPost && !in_array($action, ['login', 'register'], true)) requireCsrf($in);
 
 /** Shapes one items-table row for the front-end (never includes the photo itself, only whether one exists). */
 function itemRow(array $r): array {
@@ -179,7 +209,7 @@ switch ($action) {
 case 'me':
     $uid = (int)($_SESSION['uid'] ?? 0);
     $s = $uid ? state($uid) : null;
-    out(['ok' => true, 'user' => $s['user'] ?? null, 'pending' => $s['pending'] ?? null]);
+    out(['ok' => true, 'user' => $s['user'] ?? null, 'pending' => $s['pending'] ?? null, 'csrfToken' => csrfToken()]);
 
 case 'organizations':
     out(['ok' => true, 'organizations' => array_map(
@@ -205,8 +235,10 @@ case 'register':
     }
     session_regenerate_id(true);
     $_SESSION['uid'] = (int)db()->lastInsertId();
+    $_SESSION['last_activity'] = time();
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     $s = state($_SESSION['uid']);
-    out(['ok' => true, 'user' => $s['user'], 'pending' => $s['pending']]);
+    out(['ok' => true, 'user' => $s['user'], 'pending' => $s['pending'], 'csrfToken' => csrfToken()]);
 
 case 'login':
     if (!$isPost) fail('POST required.', 405);
@@ -216,8 +248,10 @@ case 'login':
     if (!$u || !password_verify($pass, $u['password_hash'])) fail('Invalid email or password.', 401);
     session_regenerate_id(true);
     $_SESSION['uid'] = (int)$u['id'];
+    $_SESSION['last_activity'] = time();
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     $s = state((int)$u['id']);
-    out(['ok' => true, 'user' => $s['user'], 'pending' => $s['pending']]);
+    out(['ok' => true, 'user' => $s['user'], 'pending' => $s['pending'], 'csrfToken' => csrfToken()]);
 
 case 'logout':
     if (!$isPost) fail('POST required.', 405);
